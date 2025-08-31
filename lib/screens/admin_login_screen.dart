@@ -170,7 +170,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen>
       body: FadeTransition(
         opacity: _fadeAnimation,
         child: SafeArea(
-          child: Padding(
+          child: SingleChildScrollView(
             padding: const EdgeInsets.all(24.0),
             child: Center(
               child: ConstrainedBox(
@@ -346,7 +346,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen>
                         ],
                       ),
                     ),
-                    SizedBox(height: MediaQuery.of(context).viewInsets.bottom),
+                    SizedBox(height: MediaQuery.of(context).viewInsets.bottom > 0 ? 20 : 0),
                   ],
                 ),
               ),

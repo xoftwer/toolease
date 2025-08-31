@@ -66,15 +66,24 @@ class _ManageItemsScreenState extends ConsumerState<ManageItemsScreen> {
       context: context,
       builder: (BuildContext context) {
         final storagesAsync = ref.watch(storageNotifierProvider);
+        final mediaQuery = MediaQuery.of(context);
+        final availableHeight = mediaQuery.size.height - 
+            mediaQuery.viewInsets.bottom - 
+            kToolbarHeight - 
+            200; // Reserve space for dialog padding and buttons
 
         return AlertDialog(
           title: Text(item == null ? 'Add Item' : 'Edit Item'),
-          content: Form(
-            key: formKey,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
+          contentPadding: const EdgeInsets.fromLTRB(24.0, 20.0, 24.0, 0.0),
+          content: SizedBox(
+            width: double.maxFinite,
+            height: availableHeight.clamp(300.0, mediaQuery.size.height * 0.7),
+            child: Form(
+              key: formKey,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
                   TextFormField(
                     controller: nameController,
                     decoration: const InputDecoration(
@@ -167,7 +176,9 @@ class _ManageItemsScreenState extends ConsumerState<ManageItemsScreen> {
                       return null;
                     },
                   ),
+                  const SizedBox(height: 24), // Extra spacing for keyboard
                 ],
+                ),
               ),
             ),
           ),
@@ -301,6 +312,7 @@ class _ManageItemsScreenState extends ConsumerState<ManageItemsScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
+      resizeToAvoidBottomInset: true,
       appBar: AppBar(
         title: const Text(
           'Manage Items',
@@ -317,7 +329,8 @@ class _ManageItemsScreenState extends ConsumerState<ManageItemsScreen> {
           ),
         ],
       ),
-      body: Column(
+      body: SafeArea(
+        child: Column(
         children: [
           // Header Section
           Padding(
@@ -383,6 +396,7 @@ class _ManageItemsScreenState extends ConsumerState<ManageItemsScreen> {
             ),
           ),
         ],
+        ),
       ),
     );
   }

@@ -3,11 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/student_provider.dart';
 import '../providers/storage_provider.dart';
 import '../providers/item_provider.dart';
+import '../providers/borrow_record_provider.dart';
 import '../core/design_system.dart';
 import '../shared/widgets/app_card.dart';
 import 'manage_storages_screen.dart';
 import 'manage_items_screen.dart';
 import 'manage_students_screen.dart';
+import 'manage_records_screen.dart';
 import 'reports_screen.dart';
 import 'settings_screen.dart';
 
@@ -20,6 +22,7 @@ class AdminDashboardScreen extends ConsumerWidget {
     final studentsAsync = ref.watch(studentNotifierProvider);
     final storagesAsync = ref.watch(storageNotifierProvider);
     final itemsAsync = ref.watch(itemNotifierProvider);
+    final activeBorrowCountAsync = ref.watch(activeBorrowCountNotifierProvider);
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -50,6 +53,9 @@ class AdminDashboardScreen extends ConsumerWidget {
           await ref.read(studentNotifierProvider.notifier).refreshStudents();
           await ref.read(storageNotifierProvider.notifier).refreshStorages();
           await ref.read(itemNotifierProvider.notifier).refreshItems();
+          await ref
+              .read(activeBorrowCountNotifierProvider.notifier)
+              .refreshActiveBorrowCount();
         },
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
@@ -67,6 +73,7 @@ class AdminDashboardScreen extends ConsumerWidget {
                 studentsAsync,
                 storagesAsync,
                 itemsAsync,
+                activeBorrowCountAsync,
                 context,
                 ref,
               ),
@@ -124,23 +131,19 @@ class AdminDashboardScreen extends ConsumerWidget {
               children: [
                 Text(
                   'Welcome Back, Admin',
-                  style: Theme.of(context)
-                      .textTheme
-                      .headlineSmall
-                      ?.copyWith(
-                        color: AppColors.onPrimary,
-                        fontWeight: FontWeight.bold,
-                      ),
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    color: AppColors.onPrimary,
+                    fontWeight: FontWeight.bold,
+                  ),
                   overflow: TextOverflow.ellipsis,
                   maxLines: 1,
                 ),
                 const SizedBox(height: AppSpacing.xs),
                 Text(
                   'Manage your inventory system',
-                  style: Theme.of(context).textTheme.bodyMedium
-                      ?.copyWith(
-                        color: AppColors.onPrimary.withValues(alpha: 0.9),
-                      ),
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: AppColors.onPrimary.withValues(alpha: 0.9),
+                  ),
                   overflow: TextOverflow.ellipsis,
                   maxLines: 2,
                 ),
@@ -156,13 +159,15 @@ class AdminDashboardScreen extends ConsumerWidget {
     AsyncValue studentsAsync,
     AsyncValue storagesAsync,
     AsyncValue itemsAsync,
+    AsyncValue<int> activeBorrowCountAsync,
     BuildContext context,
     WidgetRef ref,
   ) {
     // Handle loading states
     if (studentsAsync.isLoading ||
         storagesAsync.isLoading ||
-        itemsAsync.isLoading) {
+        itemsAsync.isLoading ||
+        activeBorrowCountAsync.isLoading) {
       return const Center(
         child: Padding(
           padding: EdgeInsets.all(32.0),
@@ -174,7 +179,8 @@ class AdminDashboardScreen extends ConsumerWidget {
     // Handle error states
     if (studentsAsync.hasError ||
         storagesAsync.hasError ||
-        itemsAsync.hasError) {
+        itemsAsync.hasError ||
+        activeBorrowCountAsync.hasError) {
       return AppCard(
         variant: AppCardVariant.outlined,
         child: Column(
@@ -195,6 +201,9 @@ class AdminDashboardScreen extends ConsumerWidget {
                     .read(storageNotifierProvider.notifier)
                     .refreshStorages();
                 await ref.read(itemNotifierProvider.notifier).refreshItems();
+                await ref
+                    .read(activeBorrowCountNotifierProvider.notifier)
+                    .refreshActiveBorrowCount();
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primary,
@@ -248,7 +257,7 @@ class AdminDashboardScreen extends ConsumerWidget {
         ),
         _buildStatCard(
           'Active Borrows',
-          0,
+          activeBorrowCountAsync.value ?? 0,
           Icons.assignment_outlined,
           AppColors.error,
           'Currently borrowed items',
@@ -396,7 +405,9 @@ class AdminDashboardScreen extends ConsumerWidget {
         const SizedBox(height: AppSpacing.xs),
         Text(
           label,
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
+          style: Theme.of(
+            context,
+          ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
           textAlign: TextAlign.center,
           overflow: TextOverflow.ellipsis,
           maxLines: 1,
@@ -445,7 +456,9 @@ class AdminDashboardScreen extends ConsumerWidget {
           const SizedBox(height: AppSpacing.xs),
           Text(
             description,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
             textAlign: TextAlign.center,
           ),
         ],
@@ -602,7 +615,7 @@ class AdminDashboardScreen extends ConsumerWidget {
           crossAxisCount: 2,
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          childAspectRatio: 1.1,
+          childAspectRatio: 1.0,
           crossAxisSpacing: AppSpacing.md,
           mainAxisSpacing: AppSpacing.md,
           children: [
@@ -638,6 +651,18 @@ class AdminDashboardScreen extends ConsumerWidget {
               () => Navigator.of(context).push(
                 MaterialPageRoute(
                   builder: (context) => const ManageStudentsScreen(),
+                ),
+              ),
+              context,
+            ),
+            _buildManagementCard(
+              'Manage Records',
+              'View & archive records',
+              Icons.assignment_outlined,
+              AppColors.warning,
+              () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => const ManageRecordsScreen(),
                 ),
               ),
               context,
@@ -691,7 +716,9 @@ class AdminDashboardScreen extends ConsumerWidget {
           const SizedBox(height: AppSpacing.xs),
           Text(
             description,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
             textAlign: TextAlign.center,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,

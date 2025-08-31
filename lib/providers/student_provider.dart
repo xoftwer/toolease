@@ -48,4 +48,26 @@ class StudentNotifier extends StateNotifier<AsyncValue<List<Student>>> {
       rethrow;
     }
   }
+
+  Future<void> updateStudent(Student student) async {
+    try {
+      final databaseService = _ref.read(databaseServiceProvider);
+      await databaseService.updateStudent(student);
+      await refreshStudents();
+    } catch (error, stackTrace) {
+      state = AsyncValue.error(error, stackTrace);
+      rethrow;
+    }
+  }
+
+  Future<void> deleteStudent(int studentId) async {
+    try {
+      final databaseService = _ref.read(databaseServiceProvider);
+      await databaseService.deleteStudent(studentId);
+      await refreshStudents();
+    } catch (error, stackTrace) {
+      state = AsyncValue.error(error, stackTrace);
+      rethrow;
+    }
+  }
 }

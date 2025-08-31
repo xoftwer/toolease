@@ -130,6 +130,17 @@ class _ManageStudentsScreenState extends ConsumerState<ManageStudentsScreen> {
                         createdAt: DateTime.now(),
                       );
                       await ref.read(studentNotifierProvider.notifier).addStudent(newStudent);
+                    } else {
+                      // Update existing student using StateNotifier
+                      final updatedStudent = models.Student(
+                        id: student.id,
+                        studentId: student.studentId, // Keep original student ID
+                        name: nameController.text.trim(),
+                        yearLevel: yearLevelController.text.trim(),
+                        section: sectionController.text.trim(),
+                        createdAt: student.createdAt, // Keep original creation date
+                      );
+                      await ref.read(studentNotifierProvider.notifier).updateStudent(updatedStudent);
                     }
                     
                     if (context.mounted) {
@@ -151,6 +162,81 @@ class _ManageStudentsScreenState extends ConsumerState<ManageStudentsScreen> {
                 }
               },
               child: Text(student == null ? 'Add' : 'Update'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _showDeleteConfirmation(models.Student student) async {
+    return showDialog<void>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Delete Student'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Are you sure you want to delete this student?'),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Student: ${student.name}',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    Text('ID: ${student.studentId}'),
+                    Text('${student.yearLevel} - ${student.section}'),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'This action cannot be undone.',
+                style: TextStyle(color: Colors.red, fontWeight: FontWeight.w500),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                try {
+                  await ref.read(studentNotifierProvider.notifier).deleteStudent(student.id);
+                  if (context.mounted) {
+                    Navigator.of(context).pop();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Student deleted successfully!'),
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  if (context.mounted) {
+                    Navigator.of(context).pop();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Error: $e')),
+                    );
+                  }
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Delete'),
             ),
           ],
         );
@@ -312,34 +398,50 @@ class _ManageStudentsScreenState extends ConsumerState<ManageStudentsScreen> {
                                     ),
                                   ],
                                 ),
-                                trailing: IconButton(
-                                  icon: const Icon(Icons.info_outline, color: Colors.blue),
-                                  onPressed: () {
-                                    showDialog(
-                                      context: context,
-                                      builder: (context) => AlertDialog(
-                                        title: const Text('Student Details'),
-                                        content: SingleChildScrollView(
-                                          child: Column(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              _buildDetailRow('Student ID:', student.studentId),
-                                              _buildDetailRow('Name:', student.name),
-                                              _buildDetailRow('Year Level:', student.yearLevel),
-                                              _buildDetailRow('Section:', student.section),
-                                              _buildDetailRow('Registered:', student.createdAt.toLocal().toString().split(' ')[0]),
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      icon: const Icon(Icons.info_outline, color: Colors.blue),
+                                      tooltip: 'View Details',
+                                      onPressed: () {
+                                        showDialog(
+                                          context: context,
+                                          builder: (context) => AlertDialog(
+                                            title: const Text('Student Details'),
+                                            content: SingleChildScrollView(
+                                              child: Column(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  _buildDetailRow('Student ID:', student.studentId),
+                                                  _buildDetailRow('Name:', student.name),
+                                                  _buildDetailRow('Year Level:', student.yearLevel),
+                                                  _buildDetailRow('Section:', student.section),
+                                                  _buildDetailRow('Registered:', student.createdAt.toLocal().toString().split(' ')[0]),
+                                                ],
+                                              ),
+                                            ),
+                                            actions: [
+                                              TextButton(
+                                                onPressed: () => Navigator.of(context).pop(),
+                                                child: const Text('Close'),
+                                              ),
                                             ],
                                           ),
-                                        ),
-                                        actions: [
-                                          TextButton(
-                                            onPressed: () => Navigator.of(context).pop(),
-                                            child: const Text('Close'),
-                                          ),
-                                        ],
-                                      ),
-                                    );
-                                  },
+                                        );
+                                      },
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.edit_outlined, color: Colors.orange),
+                                      tooltip: 'Edit Student',
+                                      onPressed: () => _showStudentDialog(student: student),
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.delete_outline, color: Colors.red),
+                                      tooltip: 'Delete Student',
+                                      onPressed: () => _showDeleteConfirmation(student),
+                                    ),
+                                  ],
                                 ),
                               ),
                             );

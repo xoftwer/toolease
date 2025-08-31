@@ -17,9 +17,9 @@ class _BorrowScreenState extends ConsumerState<BorrowScreen> {
   final _formKey = GlobalKey<FormState>();
   
   models.Student? _selectedStudent;
-  models.Storage? _selectedStorage;
+  Set<int> _selectedStorages = {}; // Track multiple selected storages
   List<models.Storage> _storages = [];
-  List<models.Item> _items = [];
+  Map<int, List<models.Item>> _itemsByStorage = {}; // storageId -> items
   Map<int, int> _selectedItems = {}; // itemId -> quantity
 
   @override
@@ -77,15 +77,30 @@ class _BorrowScreenState extends ConsumerState<BorrowScreen> {
     }
   }
 
-  Future<void> _loadItemsByStorage(models.Storage storage) async {
+  Future<void> _toggleStorageSelection(models.Storage storage) async {
     try {
       final databaseService = ref.read(databaseServiceProvider);
-      final items = await databaseService.getItemsByStorage(storage.id);
-      setState(() {
-        _selectedStorage = storage;
-        _items = items;
-        _selectedItems.clear();
-      });
+      
+      if (_selectedStorages.contains(storage.id)) {
+        // Deselect storage and remove its items from selection
+        final storageItems = _itemsByStorage[storage.id] ?? [];
+        final storageItemIds = storageItems.map((item) => item.id).toSet();
+        
+        setState(() {
+          _selectedStorages.remove(storage.id);
+          _itemsByStorage.remove(storage.id);
+          
+          // Remove selected items from this storage
+          _selectedItems.removeWhere((itemId, _) => storageItemIds.contains(itemId));
+        });
+      } else {
+        // Select storage and load its items
+        final items = await databaseService.getItemsByStorage(storage.id);
+        setState(() {
+          _selectedStorages.add(storage.id);
+          _itemsByStorage[storage.id] = items;
+        });
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -206,7 +221,7 @@ class _BorrowScreenState extends ConsumerState<BorrowScreen> {
             
             // Storage Selection
             if (_selectedStudent != null) ...[
-              const Text('Select Storage', 
+              const Text('Select Storages (Multiple Allowed)', 
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
               SizedBox(
@@ -216,17 +231,13 @@ class _BorrowScreenState extends ConsumerState<BorrowScreen> {
                   itemCount: _storages.length,
                   itemBuilder: (context, index) {
                     final storage = _storages[index];
-                    final isSelected = _selectedStorage?.id == storage.id;
+                    final isSelected = _selectedStorages.contains(storage.id);
                     return Padding(
                       padding: const EdgeInsets.only(right: 8),
                       child: FilterChip(
                         label: Text(storage.name),
                         selected: isSelected,
-                        onSelected: (selected) {
-                          if (selected) {
-                            _loadItemsByStorage(storage);
-                          }
-                        },
+                        onSelected: (_) => _toggleStorageSelection(storage),
                         backgroundColor: Colors.grey.shade200,
                         selectedColor: Colors.blue.shade100,
                       ),
@@ -238,17 +249,29 @@ class _BorrowScreenState extends ConsumerState<BorrowScreen> {
               const SizedBox(height: 16),
               
               // Items List
-              if (_items.isNotEmpty) ...[
-                Text('Available Items in ${_selectedStorage!.name}', 
-                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              if (_selectedStorages.isNotEmpty) ...[
+                const Text('Available Items from Selected Storages', 
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
                 SizedBox(
                   height: 400,
                   child: ListView.builder(
-                    itemCount: _items.length,
+                    itemCount: _itemsByStorage.values.fold<int>(0, (sum, items) => sum + items.length),
                     itemBuilder: (context, index) {
-                      final item = _items[index];
+                      // Flatten all items from selected storages
+                      final allItems = <models.Item>[];
+                      final storageNames = <int, String>{};
+                      
+                      for (final storageId in _selectedStorages) {
+                        final storage = _storages.firstWhere((s) => s.id == storageId);
+                        storageNames[storageId] = storage.name;
+                        allItems.addAll(_itemsByStorage[storageId] ?? []);
+                      }
+                      
+                      final item = allItems[index];
                       final selectedQuantity = _selectedItems[item.id] ?? 0;
+                      final storageName = storageNames[item.storageId] ?? 'Unknown';
+                      
                       return Card(
                         child: ListTile(
                           title: Text(
@@ -260,10 +283,18 @@ class _BorrowScreenState extends ConsumerState<BorrowScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                item.description ?? '',
-                                overflow: TextOverflow.ellipsis,
-                                maxLines: 2,
+                                'Storage: $storageName',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w500,
+                                  color: Colors.blue.shade700,
+                                ),
                               ),
+                              if (item.description?.isNotEmpty == true)
+                                Text(
+                                  item.description!,
+                                  overflow: TextOverflow.ellipsis,
+                                  maxLines: 2,
+                                ),
                               Text(
                                 'Available: ${item.availableQuantity}/${item.totalQuantity}',
                                 overflow: TextOverflow.ellipsis,

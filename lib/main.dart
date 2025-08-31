@@ -11,7 +11,7 @@ import 'providers/settings_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   runApp(const ProviderScope(child: ToolEaseApp()));
 }
 
