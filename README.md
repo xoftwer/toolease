@@ -106,14 +106,18 @@ lib/
 - **Inventory Management**: Full CRUD operations for items and storages
 - **Student Management**: View and manage student records
 - **Records Tracking**: Monitor active borrows and returns
+- **Item Restoration**: Restore lost and damaged items back to available stock
+  - Mark lost items as replaced
+  - Mark damaged items as repaired
 - **Advanced Reporting**: Generate PDF, Excel, and CSV reports
 - **System Settings**: Configure app behavior and features
 - **User Manual**: Comprehensive admin documentation
 
 ### Core System Features
 - **Kiosk Mode**: Secure tablet deployment with gesture-based admin access
-- **Real-time Updates**: Live inventory tracking with quantity management
+- **Real-time Updates**: Live inventory tracking with quantity management and instant dashboard sync
 - **Condition Tracking**: Individual item condition monitoring (Good/Damaged/Lost)
+- **Item Restoration System**: Comprehensive lost/damaged item recovery with stock restoration
 - **Data Export**: Comprehensive reporting and data export capabilities
 - **Accessibility**: Full screen reader support and high contrast mode
 
@@ -146,7 +150,8 @@ The application uses Drift (SQLite) for local data storage. Key tables include:
 1. **Access**: Authenticate using device PIN/biometric
 2. **Manage**: Add/edit items, storages, and student records
 3. **Monitor**: View dashboard metrics and active transactions
-4. **Report**: Generate detailed usage and inventory reports
+4. **Restore**: Recover lost and damaged items back to available stock
+5. **Report**: Generate detailed usage and inventory reports
 
 ## 🧪 Testing
 

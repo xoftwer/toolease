@@ -98,6 +98,10 @@ lib/
 - **Kiosk Mode**: Restricts system navigation when enabled
 - **Borrow ID Generation**: Format `25XXXXX` (year prefix + sequential number)
 - **Quantity Condition Tracking**: Individual unit condition tracking for returns
+- **Item Restoration**: Lost and damaged items can be restored to stock
+  - Lost items: Mark as replaced, restores available quantity
+  - Damaged items: Mark as repaired, restores available quantity
+- **Real-time Synchronization**: Dashboard updates immediately when items are restored
 - **PDF Reports**: Export functionality for records and reports
 - **Settings Management**: Feature toggles for screens and kiosk mode
 
@@ -115,6 +119,8 @@ lib/
 - Use transactions for multi-table operations
 - Handle async operations with proper error catching
 - Test database operations thoroughly, especially quantity updates
+- **Item Restoration Logic**: Both lost and damaged item restoration only updates `availableQuantity`, not `totalQuantity`
+- **Provider Invalidation**: Always invalidate relevant providers after database changes for real-time updates
 
 **State Management**
 
@@ -189,3 +195,37 @@ flutter packages pub run build_runner build --delete-conflicting-outputs
 - Check device permissions
 - Verify kiosk service implementation
 - Test gesture recognition
+
+## Item Restoration Feature
+
+The application supports restoring lost and damaged items back to available stock through the Manage Records screen.
+
+### Restoration Types
+
+**Lost Items → Replacement**
+- Items marked as "lost" can be restored by marking them as "replaced"
+- Updates only `availableQuantity` (not `totalQuantity`)
+- Each selected condition restores exactly 1 unit to available stock
+
+**Damaged Items → Repair**  
+- Items marked as "damaged" can be restored by marking them as "repaired"
+- Updates only `availableQuantity` (not `totalQuantity`)
+- Each selected condition restores exactly 1 unit to available stock
+
+### Implementation Details
+
+**Database Methods:**
+- `restoreLostItemsToStock(List<int> conditionIds)` - Restores lost items
+- `restoreDamagedItemsToStock(List<int> conditionIds)` - Restores damaged items
+
+**UI Features:**
+- Individual item selection with checkboxes
+- Batch restoration operations
+- Confirmation dialogs
+- Real-time dashboard updates via provider invalidation
+
+**Key Logic:**
+- Each `QuantityCondition` represents exactly 1 unit
+- Restoration changes condition from `lost`/`damaged` to `good`
+- Only `availableQuantity` is increased, `totalQuantity` remains unchanged
+- Providers are invalidated for immediate UI updates across the app
