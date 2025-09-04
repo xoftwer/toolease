@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/database_provider.dart';
+import '../providers/item_provider.dart';
+import '../providers/borrow_record_provider.dart';
 import '../models/student.dart' as models;
 import '../models/storage.dart' as models;
 import '../models/item.dart' as models;
@@ -123,6 +125,13 @@ class _BorrowScreenState extends ConsumerState<BorrowScreen> {
         studentId: _selectedStudent!.id,
         items: borrowItems,
       );
+
+      // Invalidate providers to refresh dashboard data
+      ref.invalidate(itemNotifierProvider);
+      ref.invalidate(activeBorrowCountNotifierProvider);
+      ref.invalidate(allItemsProvider);
+      ref.invalidate(activeBorrowRecordsCountProvider);
+      ref.invalidate(recentBorrowRecordsWithNamesNotifierProvider);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

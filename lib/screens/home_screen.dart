@@ -7,13 +7,45 @@ import '../shared/widgets/app_scaffold.dart';
 import '../shared/widgets/action_card.dart';
 import '../shared/widgets/app_card.dart';
 import '../providers/settings_provider.dart';
+import '../providers/borrow_record_provider.dart';
+import '../models/borrow_record.dart';
 import 'student_user_manual_screen.dart';
 
-class HomeScreen extends ConsumerWidget {
+class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    // Refresh recent activity when screen first loads
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(recentBorrowRecordsWithNamesNotifierProvider.notifier).refreshRecentBorrowRecordsWithNames();
+    });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    // Refresh recent activity when app comes back to foreground
+    if (state == AppLifecycleState.resumed) {
+      ref.read(recentBorrowRecordsWithNamesNotifierProvider.notifier).refreshRecentBorrowRecordsWithNames();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return AppScaffold(
       title: 'ToolEase',
       showBackButton: false,
@@ -163,7 +195,12 @@ class HomeScreen extends ConsumerWidget {
             const SizedBox(height: AppSpacing.lg),
             _buildUserManualButton(context),
             const SizedBox(height: AppSpacing.md),
-            _buildRecentActivityCard(),
+            Consumer(
+              builder: (context, ref, child) {
+                final recentRecordsAsync = ref.watch(recentBorrowRecordsWithNamesNotifierProvider);
+                return _buildRecentActivityCard(recentRecordsAsync);
+              },
+            ),
           ],
         ),
       ),
@@ -209,7 +246,7 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildRecentActivityCard() {
+  Widget _buildRecentActivityCard(AsyncValue<List<Map<String, dynamic>>> recentRecordsAsync) {
     return AppCard(
       variant: AppCardVariant.outlined,
       child: SizedBox(
@@ -231,26 +268,163 @@ class HomeScreen extends ConsumerWidget {
                 ],
               ),
             ),
-            const Expanded(
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.inbox_rounded,
-                      size: AppSpacing.iconSizeXl,
-                      color: AppColors.textTertiary,
-                    ),
-                    SizedBox(height: AppSpacing.sm),
-                    Text('No recent activity', style: AppTypography.bodyMedium),
-                  ],
+            Expanded(
+              child: recentRecordsAsync.when(
+                loading: () => const Center(
+                  child: CircularProgressIndicator(),
                 ),
+                error: (error, stackTrace) => const Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.error_outline_rounded,
+                        size: AppSpacing.iconSizeXl,
+                        color: AppColors.error,
+                      ),
+                      SizedBox(height: AppSpacing.sm),
+                      Text('Error loading recent activity', style: AppTypography.bodyMedium),
+                    ],
+                  ),
+                ),
+                data: (recentRecords) {
+                  if (recentRecords.isEmpty) {
+                    return const Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.inbox_rounded,
+                            size: AppSpacing.iconSizeXl,
+                            color: AppColors.textTertiary,
+                          ),
+                          SizedBox(height: AppSpacing.sm),
+                          Text('No recent activity', style: AppTypography.bodyMedium),
+                        ],
+                      ),
+                    );
+                  }
+
+                  return ListView.separated(
+                    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+                    itemCount: recentRecords.length,
+                    separatorBuilder: (context, index) => const Divider(height: 1),
+                    itemBuilder: (context, index) {
+                      final recordWithName = recentRecords[index];
+                      final record = recordWithName['borrowRecord'] as BorrowRecord;
+                      final studentName = recordWithName['studentName'] as String;
+                      
+                      final isReturned = record.returnedAt != null;
+                      final activityDate = isReturned ? record.returnedAt! : record.borrowedAt;
+                      final activityType = isReturned ? 'Returned' : 'Borrowed';
+                      final activityIcon = isReturned ? Icons.assignment_return_rounded : Icons.shopping_bag_rounded;
+                      final activityColor = isReturned ? AppColors.success : AppColors.primary;
+
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+                        child: Row(
+                          children: [
+                            Icon(
+                              activityIcon,
+                              size: AppSpacing.iconSizeSm,
+                              color: activityColor,
+                            ),
+                            const SizedBox(width: AppSpacing.sm),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Text(
+                                        record.borrowId,
+                                        style: AppTypography.bodySmall.copyWith(
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                      const SizedBox(width: AppSpacing.xs),
+                                      Text(
+                                        '• $activityType',
+                                        style: AppTypography.caption.copyWith(
+                                          color: activityColor,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  Text(
+                                    studentName,
+                                    style: AppTypography.caption.copyWith(
+                                      color: AppColors.textSecondary,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  Text(
+                                    _formatDateTime(activityDate),
+                                    style: AppTypography.caption.copyWith(
+                                      color: AppColors.textTertiary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: AppSpacing.xs,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: activityColor.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                _getStatusText(record.status),
+                                style: AppTypography.caption.copyWith(
+                                  color: activityColor,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  );
+                },
               ),
             ),
           ],
         ),
       ),
     );
+  }
+
+
+  String _getStatusText(BorrowStatus status) {
+    switch (status) {
+      case BorrowStatus.active:
+        return 'Active';
+      case BorrowStatus.returned:
+        return 'Returned';
+      case BorrowStatus.archived:
+        return 'Archived';
+    }
+  }
+
+  String _formatDateTime(DateTime dateTime) {
+    final now = DateTime.now();
+    final difference = now.difference(dateTime);
+
+    if (difference.inDays == 0) {
+      if (difference.inHours == 0) {
+        return '${difference.inMinutes}m ago';
+      }
+      return '${difference.inHours}h ago';
+    } else if (difference.inDays < 7) {
+      return '${difference.inDays}d ago';
+    } else {
+      return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
+    }
   }
 
   void _showFeatureDisabledDialog(BuildContext context, String featureName) {

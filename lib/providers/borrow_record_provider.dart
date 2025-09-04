@@ -20,6 +20,24 @@ final activeBorrowCountNotifierProvider = StateNotifierProvider<ActiveBorrowCoun
   (ref) => ActiveBorrowCountNotifier(ref),
 );
 
+final recentBorrowRecordsProvider = FutureProvider<List<BorrowRecord>>((ref) async {
+  final databaseService = ref.watch(databaseServiceProvider);
+  return await databaseService.getRecentBorrowRecords(5);
+});
+
+final recentBorrowRecordsNotifierProvider = StateNotifierProvider<RecentBorrowRecordsNotifier, AsyncValue<List<BorrowRecord>>>(
+  (ref) => RecentBorrowRecordsNotifier(ref),
+);
+
+final recentBorrowRecordsWithNamesProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
+  final databaseService = ref.watch(databaseServiceProvider);
+  return await databaseService.getRecentBorrowRecordsWithStudentNames(5);
+});
+
+final recentBorrowRecordsWithNamesNotifierProvider = StateNotifierProvider<RecentBorrowRecordsWithNamesNotifier, AsyncValue<List<Map<String, dynamic>>>>(
+  (ref) => RecentBorrowRecordsWithNamesNotifier(ref),
+);
+
 class BorrowRecordNotifier extends StateNotifier<AsyncValue<List<BorrowRecord>>> {
   final Ref _ref;
 
@@ -63,5 +81,51 @@ class ActiveBorrowCountNotifier extends StateNotifier<AsyncValue<int>> {
   Future<void> refreshActiveBorrowCount() async {
     state = const AsyncValue.loading();
     await _loadActiveBorrowCount();
+  }
+}
+
+class RecentBorrowRecordsNotifier extends StateNotifier<AsyncValue<List<BorrowRecord>>> {
+  final Ref _ref;
+
+  RecentBorrowRecordsNotifier(this._ref) : super(const AsyncValue.loading()) {
+    _loadRecentBorrowRecords();
+  }
+
+  Future<void> _loadRecentBorrowRecords() async {
+    try {
+      final databaseService = _ref.read(databaseServiceProvider);
+      final recentRecords = await databaseService.getRecentBorrowRecords(5);
+      state = AsyncValue.data(recentRecords);
+    } catch (error, stackTrace) {
+      state = AsyncValue.error(error, stackTrace);
+    }
+  }
+
+  Future<void> refreshRecentBorrowRecords() async {
+    state = const AsyncValue.loading();
+    await _loadRecentBorrowRecords();
+  }
+}
+
+class RecentBorrowRecordsWithNamesNotifier extends StateNotifier<AsyncValue<List<Map<String, dynamic>>>> {
+  final Ref _ref;
+
+  RecentBorrowRecordsWithNamesNotifier(this._ref) : super(const AsyncValue.loading()) {
+    _loadRecentBorrowRecordsWithNames();
+  }
+
+  Future<void> _loadRecentBorrowRecordsWithNames() async {
+    try {
+      final databaseService = _ref.read(databaseServiceProvider);
+      final recentRecords = await databaseService.getRecentBorrowRecordsWithStudentNames(5);
+      state = AsyncValue.data(recentRecords);
+    } catch (error, stackTrace) {
+      state = AsyncValue.error(error, stackTrace);
+    }
+  }
+
+  Future<void> refreshRecentBorrowRecordsWithNames() async {
+    state = const AsyncValue.loading();
+    await _loadRecentBorrowRecordsWithNames();
   }
 }

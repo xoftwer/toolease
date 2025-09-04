@@ -758,4 +758,149 @@ class DatabaseService {
       }
     });
   }
+
+  Future<List<models.BorrowRecord>> getRecentBorrowRecords([int limit = 5]) async {
+    // Get all records first, then sort by most recent activity in memory
+    final records = await _database.select(_database.borrowRecords).get();
+    
+    // Sort by most recent activity (return date if exists, otherwise borrow date)
+    records.sort((a, b) {
+      final aDate = a.returnedAt ?? a.borrowedAt;
+      final bDate = b.returnedAt ?? b.borrowedAt;
+      return bDate.compareTo(aDate);
+    });
+    
+    // Take only the requested limit
+    final limitedRecords = records.take(limit).toList();
+
+    List<models.BorrowRecord> borrowRecords = [];
+    for (final record in limitedRecords) {
+      final items = await (_database.select(
+        _database.borrowItems,
+      )..where((bi) => bi.borrowRecordId.equals(record.id))).get();
+
+      List<models.BorrowItem> borrowItems = [];
+      for (final bi in items) {
+        // Get quantity conditions for this borrow item
+        final quantityConditions = await (_database.select(
+          _database.borrowItemConditions,
+        )..where((bic) => bic.borrowItemId.equals(bi.id))).get();
+
+        final conditions = quantityConditions
+            .map(
+              (qc) => models.QuantityCondition(
+                id: qc.id,
+                borrowItemId: qc.borrowItemId,
+                quantityUnit: qc.quantityUnit,
+                condition: models.ItemCondition.values.firstWhere(
+                  (c) => c.name == qc.condition,
+                ),
+              ),
+            )
+            .toList();
+
+        borrowItems.add(
+          models.BorrowItem(
+            id: bi.id,
+            borrowRecordId: bi.borrowRecordId,
+            itemId: bi.itemId,
+            quantity: bi.quantity,
+            quantityConditions: conditions,
+          ),
+        );
+      }
+
+      borrowRecords.add(
+        models.BorrowRecord(
+          id: record.id,
+          borrowId: record.borrowId,
+          studentId: record.studentId,
+          status: models.BorrowStatus.values.firstWhere(
+            (s) => s.name == record.status,
+          ),
+          borrowedAt: record.borrowedAt,
+          returnedAt: record.returnedAt,
+          items: borrowItems,
+        ),
+      );
+    }
+
+    return borrowRecords;
+  }
+
+  Future<List<Map<String, dynamic>>> getRecentBorrowRecordsWithStudentNames([int limit = 5]) async {
+    // Get all records first, then sort by most recent activity in memory
+    final records = await _database.select(_database.borrowRecords).get();
+    
+    // Sort by most recent activity (return date if exists, otherwise borrow date)
+    records.sort((a, b) {
+      final aDate = a.returnedAt ?? a.borrowedAt;
+      final bDate = b.returnedAt ?? b.borrowedAt;
+      return bDate.compareTo(aDate);
+    });
+    
+    // Take only the requested limit
+    final limitedRecords = records.take(limit).toList();
+
+    List<Map<String, dynamic>> borrowRecordsWithNames = [];
+    for (final record in limitedRecords) {
+      // Get student information
+      final student = await (_database.select(_database.students)
+        ..where((s) => s.id.equals(record.studentId))).getSingleOrNull();
+      
+      final items = await (_database.select(
+        _database.borrowItems,
+      )..where((bi) => bi.borrowRecordId.equals(record.id))).get();
+
+      List<models.BorrowItem> borrowItems = [];
+      for (final bi in items) {
+        // Get quantity conditions for this borrow item
+        final quantityConditions = await (_database.select(
+          _database.borrowItemConditions,
+        )..where((bic) => bic.borrowItemId.equals(bi.id))).get();
+
+        final conditions = quantityConditions
+            .map(
+              (qc) => models.QuantityCondition(
+                id: qc.id,
+                borrowItemId: qc.borrowItemId,
+                quantityUnit: qc.quantityUnit,
+                condition: models.ItemCondition.values.firstWhere(
+                  (c) => c.name == qc.condition,
+                ),
+              ),
+            )
+            .toList();
+
+        borrowItems.add(
+          models.BorrowItem(
+            id: bi.id,
+            borrowRecordId: bi.borrowRecordId,
+            itemId: bi.itemId,
+            quantity: bi.quantity,
+            quantityConditions: conditions,
+          ),
+        );
+      }
+
+      final borrowRecord = models.BorrowRecord(
+        id: record.id,
+        borrowId: record.borrowId,
+        studentId: record.studentId,
+        status: models.BorrowStatus.values.firstWhere(
+          (s) => s.name == record.status,
+        ),
+        borrowedAt: record.borrowedAt,
+        returnedAt: record.returnedAt,
+        items: borrowItems,
+      );
+
+      borrowRecordsWithNames.add({
+        'borrowRecord': borrowRecord,
+        'studentName': student?.name ?? 'Unknown Student',
+      });
+    }
+
+    return borrowRecordsWithNames;
+  }
 }

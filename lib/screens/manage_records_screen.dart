@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/database_provider.dart';
+import '../providers/borrow_record_provider.dart';
 import '../models/student.dart' as models;
 import '../models/item.dart' as models;
 import '../models/borrow_record.dart' as models;
@@ -241,6 +242,9 @@ class _ManageRecordsScreenState extends ConsumerState<ManageRecordsScreen>
       await _loadAllData();
       setState(() => _selectedRecords.clear());
       
+      // Invalidate providers to refresh other screens
+      ref.invalidate(recentBorrowRecordsWithNamesNotifierProvider);
+      
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Records archived successfully')),
@@ -277,6 +281,9 @@ class _ManageRecordsScreenState extends ConsumerState<ManageRecordsScreen>
       
       await _loadAllData();
       setState(() => _selectedRecords.clear());
+      
+      // Invalidate providers to refresh other screens
+      ref.invalidate(recentBorrowRecordsWithNamesNotifierProvider);
       
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
