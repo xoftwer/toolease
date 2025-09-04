@@ -903,4 +903,118 @@ class DatabaseService {
 
     return borrowRecordsWithNames;
   }
+
+  // Item restoration functionality
+  Future<void> restoreLostItemsToStock(List<int> conditionIds) async {
+    await _database.transaction(() async {
+      // Group by item to batch updates efficiently
+      final Map<int, int> itemCountMap = {};
+      
+      for (final conditionId in conditionIds) {
+        // Get the quantity condition
+        final condition = await (_database.select(_database.borrowItemConditions)
+          ..where((bic) => bic.id.equals(conditionId) & bic.condition.equals('lost')))
+          .getSingleOrNull();
+        
+        if (condition == null) continue;
+        
+        // Get the borrow item to get the actual item ID
+        final borrowItem = await (_database.select(_database.borrowItems)
+          ..where((bi) => bi.id.equals(condition.borrowItemId)))
+          .getSingleOrNull();
+        
+        if (borrowItem == null) continue;
+        
+        // Update the condition from lost to good (replaced)
+        await (_database.update(_database.borrowItemConditions)
+          ..where((bic) => bic.id.equals(conditionId)))
+          .write(BorrowItemConditionsCompanion(
+            condition: const Value('good'),
+          ));
+        
+        // Count items to restore (each condition = 1 unit)
+        itemCountMap[borrowItem.itemId] = (itemCountMap[borrowItem.itemId] ?? 0) + 1;
+      }
+      
+      // Update item quantities in batch
+      for (final entry in itemCountMap.entries) {
+        final itemId = entry.key;
+        final unitsToAdd = entry.value;
+        
+        final currentItem = await (_database.select(_database.items)
+          ..where((i) => i.id.equals(itemId))).getSingle();
+        
+        await (_database.update(_database.items)
+          ..where((i) => i.id.equals(itemId)))
+          .write(ItemsCompanion(
+            availableQuantity: Value(currentItem.availableQuantity + unitsToAdd),
+            // Don't change total quantity for replacements - just restore available quantity
+          ));
+      }
+    });
+  }
+
+  Future<void> restoreDamagedItemsToStock(List<int> conditionIds) async {
+    await _database.transaction(() async {
+      // Group by item to batch updates efficiently
+      final Map<int, int> itemCountMap = {};
+      
+      for (final conditionId in conditionIds) {
+        // Get the quantity condition
+        final condition = await (_database.select(_database.borrowItemConditions)
+          ..where((bic) => bic.id.equals(conditionId) & bic.condition.equals('damaged')))
+          .getSingleOrNull();
+        
+        if (condition == null) continue;
+        
+        // Get the borrow item to get the actual item ID
+        final borrowItem = await (_database.select(_database.borrowItems)
+          ..where((bi) => bi.id.equals(condition.borrowItemId)))
+          .getSingleOrNull();
+        
+        if (borrowItem == null) continue;
+        
+        // Update the condition from damaged to good (repaired)
+        await (_database.update(_database.borrowItemConditions)
+          ..where((bic) => bic.id.equals(conditionId)))
+          .write(BorrowItemConditionsCompanion(
+            condition: const Value('good'),
+          ));
+        
+        // Count items to restore (each condition = 1 unit)
+        itemCountMap[borrowItem.itemId] = (itemCountMap[borrowItem.itemId] ?? 0) + 1;
+      }
+      
+      // Update item quantities in batch
+      for (final entry in itemCountMap.entries) {
+        final itemId = entry.key;
+        final unitsToAdd = entry.value;
+        
+        final currentItem = await (_database.select(_database.items)
+          ..where((i) => i.id.equals(itemId))).getSingle();
+        
+        await (_database.update(_database.items)
+          ..where((i) => i.id.equals(itemId)))
+          .write(ItemsCompanion(
+            availableQuantity: Value(currentItem.availableQuantity + unitsToAdd),
+            // Don't increase total quantity for repairs, just available
+          ));
+      }
+    });
+  }
+
+  // Helper method to get item ID from condition ID
+  Future<int?> getItemIdFromConditionId(int conditionId) async {
+    final condition = await (_database.select(_database.borrowItemConditions)
+      ..where((bic) => bic.id.equals(conditionId)))
+      .getSingleOrNull();
+    
+    if (condition == null) return null;
+    
+    final borrowItem = await (_database.select(_database.borrowItems)
+      ..where((bi) => bi.id.equals(condition.borrowItemId)))
+      .getSingleOrNull();
+    
+    return borrowItem?.itemId;
+  }
 }

@@ -5,6 +5,9 @@ import '../providers/item_provider.dart';
 import '../providers/borrow_record_provider.dart';
 import '../models/student.dart' as models;
 import '../models/borrow_record.dart' as models;
+import '../core/design_system.dart';
+import '../shared/widgets/app_scaffold.dart';
+import '../shared/widgets/app_card.dart';
 
 class ReturnScreen extends ConsumerStatefulWidget {
   const ReturnScreen({super.key});
@@ -19,8 +22,8 @@ class _ReturnScreenState extends ConsumerState<ReturnScreen> {
   
   models.Student? _selectedStudent;
   List<models.BorrowRecord> _activeBorrows = [];
-  Map<int, models.ItemCondition> _itemConditions = {}; // itemId -> condition (for backward compatibility)
-  Map<int, List<models.ItemCondition>> _quantityConditions = {}; // borrowItemId -> list of conditions per quantity
+  Map<int, models.ItemCondition> _itemConditions = {};
+  Map<int, List<models.ItemCondition>> _quantityConditions = {};
 
   @override
   void dispose() {
@@ -43,17 +46,14 @@ class _ReturnScreenState extends ConsumerState<ReturnScreen> {
           _itemConditions.clear();
           _quantityConditions.clear();
           
-          // Initialize all items as good condition and individual quantities
           for (final record in activeBorrows) {
             for (final item in record.items) {
               _itemConditions[item.itemId] = models.ItemCondition.good;
               
-              // If item already has quantity conditions from database, use them
               if (item.quantityConditions.isNotEmpty) {
                 final conditions = item.quantityConditions.map((qc) => qc.condition).toList();
                 _quantityConditions[item.id] = conditions;
               } else {
-                // Initialize all quantity units as good condition
                 _quantityConditions[item.id] = List.filled(item.quantity, models.ItemCondition.good);
               }
             }
@@ -94,7 +94,7 @@ class _ReturnScreenState extends ConsumerState<ReturnScreen> {
           
           for (int i = 0; i < quantityConditions.length; i++) {
             conditions.add(models.QuantityCondition(
-              id: 0, // Will be assigned by database
+              id: 0,
               borrowItemId: item.id,
               quantityUnit: i + 1,
               condition: quantityConditions[i],
@@ -113,7 +113,6 @@ class _ReturnScreenState extends ConsumerState<ReturnScreen> {
         );
       }
 
-      // Invalidate providers to refresh dashboard data
       ref.invalidate(itemNotifierProvider);
       ref.invalidate(activeBorrowCountNotifierProvider);
       ref.invalidate(allItemsProvider);
@@ -148,250 +147,369 @@ class _ReturnScreenState extends ConsumerState<ReturnScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Return Items'),
-        backgroundColor: Colors.orange,
-        foregroundColor: Colors.white,
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
+    return AppScaffold(
+      title: 'Return Items',
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(AppSpacing.screenPadding),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Student Search Section
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('Student Information', 
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: TextFormField(
-                              controller: _studentIdController,
-                              decoration: const InputDecoration(
-                                labelText: 'Student ID',
-                                border: OutlineInputBorder(),
-                                hintText: 'Enter student ID',
-                              ),
-                              validator: (value) {
-                                if (value == null || value.trim().isEmpty) {
-                                  return 'Please enter student ID';
-                                }
-                                return null;
-                              },
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          ElevatedButton(
-                            onPressed: _searchStudent,
-                            child: const Text('Search'),
-                          ),
-                        ],
-                      ),
-                      if (_selectedStudent != null) ...[
-                        const SizedBox(height: 16),
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.green.shade50,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.green.shade200),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('✓ Student Found', 
-                                style: TextStyle(color: Colors.green.shade700, fontWeight: FontWeight.bold)),
-                              Text('Name: ${_selectedStudent!.name}'),
-                              Text('Year Level: ${_selectedStudent!.yearLevel}'),
-                              Text('Section: ${_selectedStudent!.section}'),
-                              Text('Active Borrows: ${_activeBorrows.length}'),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ),
-            ),
+            _buildStudentSearchSection(),
             
-            const SizedBox(height: 16),
+            const SizedBox(height: AppSpacing.lg),
             
-            // Active Borrows List
-            if (_activeBorrows.isNotEmpty) ...[
-              const Text('Borrowed Items', 
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              Expanded(
-                child: ListView.builder(
-                  itemCount: _activeBorrows.length,
-                  itemBuilder: (context, recordIndex) {
-                    final record = _activeBorrows[recordIndex];
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 16),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text('Borrow ID: ${record.borrowId}',
-                                  style: const TextStyle(fontWeight: FontWeight.bold)),
-                                Text('Date: ${record.borrowedAt.toLocal().toString().split(' ')[0]}',
-                                  style: TextStyle(color: Colors.grey.shade600)),
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-                            ...record.items.map((item) => FutureBuilder<String>(
-                              future: _getItemName(item.itemId),
-                              builder: (context, snapshot) {
-                                final itemName = snapshot.data ?? 'Loading...';
-                                final quantityConditions = _quantityConditions[item.id] ?? [];
-                                
-                                return Padding(
-                                  padding: const EdgeInsets.only(bottom: 16.0),
-                                  child: Container(
-                                    padding: const EdgeInsets.all(12),
-                                    decoration: BoxDecoration(
-                                      color: Colors.grey.shade50,
-                                      borderRadius: BorderRadius.circular(8),
-                                      border: Border.all(color: Colors.grey.shade300),
-                                    ),
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Row(
-                                          children: [
-                                            Expanded(
-                                              child: Column(
-                                                crossAxisAlignment: CrossAxisAlignment.start,
-                                                children: [
-                                                  Text(
-                                                    itemName,
-                                                    style: const TextStyle(fontWeight: FontWeight.w500),
-                                                    overflow: TextOverflow.ellipsis,
-                                                    maxLines: 1,
-                                                  ),
-                                                  Text(
-                                                    'Total Quantity: ${item.quantity}',
-                                                    style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-                                                    overflow: TextOverflow.ellipsis,
-                                                    maxLines: 1,
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 12),
-                                        const Text('Condition per unit:', 
-                                          style: TextStyle(fontWeight: FontWeight.w500, fontSize: 14)),
-                                        const SizedBox(height: 8),
-                                        Wrap(
-                                          spacing: 8,
-                                          runSpacing: 8,
-                                          children: List.generate(item.quantity, (index) {
-                                            return Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                              decoration: BoxDecoration(
-                                                color: Colors.white,
-                                                borderRadius: BorderRadius.circular(6),
-                                                border: Border.all(color: Colors.grey.shade300),
-                                              ),
-                                              child: Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  Text('Unit ${index + 1}:', 
-                                                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
-                                                  const SizedBox(width: 8),
-                                                  DropdownButton<models.ItemCondition>(
-                                                    value: quantityConditions.length > index 
-                                                        ? quantityConditions[index] 
-                                                        : models.ItemCondition.good,
-                                                    isDense: true,
-                                                    underline: const SizedBox.shrink(),
-                                                    items: models.ItemCondition.values.map((condition) {
-                                                      return DropdownMenuItem(
-                                                        value: condition,
-                                                        child: Text(condition.name.toUpperCase(),
-                                                          style: TextStyle(
-                                                            fontSize: 11,
-                                                            color: condition == models.ItemCondition.good 
-                                                                ? Colors.green.shade700 
-                                                                : condition == models.ItemCondition.damaged 
-                                                                    ? Colors.orange.shade700 
-                                                                    : Colors.red.shade700,
-                                                            fontWeight: FontWeight.bold,
-                                                          ),
-                                                        ),
-                                                      );
-                                                    }).toList(),
-                                                    onChanged: (newCondition) {
-                                                      if (newCondition != null) {
-                                                        setState(() {
-                                                          final conditions = List<models.ItemCondition>.from(_quantityConditions[item.id] ?? []);
-                                                          
-                                                          // Ensure the list is long enough
-                                                          while (conditions.length <= index) {
-                                                            conditions.add(models.ItemCondition.good);
-                                                          }
-                                                          
-                                                          conditions[index] = newCondition;
-                                                          _quantityConditions[item.id] = conditions;
-                                                        });
-                                                      }
-                                                    },
-                                                  ),
-                                                ],
-                                              ),
-                                            );
-                                          }),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                );
-                              },
-                            )).toList(),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ] else if (_selectedStudent != null) ...[
-              const Center(
-                child: Text('No active borrows found for this student.',
-                  style: TextStyle(fontSize: 16, color: Colors.grey)),
-              ),
+            if (_activeBorrows.isNotEmpty) ...[ 
+              _buildActiveBorrowsSection(),
             ],
+            
+            const SizedBox(height: 100),
           ],
         ),
       ),
-      floatingActionButton: _selectedStudent != null && _activeBorrows.isNotEmpty 
+      floatingActionButton: _activeBorrows.isNotEmpty 
         ? FloatingActionButton.extended(
             onPressed: _returnItems,
-            label: Text(
-              'Return ${_activeBorrows.fold(0, (sum, record) => sum + record.items.fold(0, (itemSum, item) => itemSum + item.quantity))} Units',
-              overflow: TextOverflow.ellipsis,
-              maxLines: 1,
-            ),
-            icon: const Icon(Icons.assignment_return),
-            backgroundColor: Colors.orange,
+            backgroundColor: AppColors.accent,
+            foregroundColor: AppColors.onPrimary,
+            icon: const Icon(Icons.assignment_return_rounded),
+            label: Text('Return ${_activeBorrows.fold(0, (sum, record) => sum + record.items.fold(0, (itemSum, item) => itemSum + item.quantity))} Items'),
           )
         : null,
+    );
+  }
+
+  Widget _buildStudentSearchSection() {
+    return AppCard(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.person_search, color: AppColors.accent, size: 24),
+                  const SizedBox(width: AppSpacing.sm),
+                  Text('Find Student', style: AppTypography.h6),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.md),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: _studentIdController,
+                      decoration: InputDecoration(
+                        labelText: 'Student ID',
+                        border: const OutlineInputBorder(),
+                        hintText: 'Enter student ID',
+                        prefixIcon: const Icon(Icons.badge),
+                        filled: true,
+                        fillColor: AppColors.surface,
+                      ),
+                      validator: (value) {
+                        if (value == null || value.trim().isEmpty) {
+                          return 'Please enter student ID';
+                        }
+                        return null;
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.md),
+                  ElevatedButton.icon(
+                    onPressed: _searchStudent,
+                    icon: const Icon(Icons.search),
+                    label: const Text('Search'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.accent,
+                      foregroundColor: AppColors.onPrimary,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.md,
+                        vertical: AppSpacing.sm + 4,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              if (_selectedStudent != null) ...[ 
+                const SizedBox(height: AppSpacing.md),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(AppSpacing.md),
+                  decoration: BoxDecoration(
+                    color: AppColors.success.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                    border: Border.all(color: AppColors.success.withValues(alpha: 0.3)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.check_circle, color: AppColors.success, size: 20),
+                          const SizedBox(width: AppSpacing.xs),
+                          Text(
+                            'Student Found',
+                            style: AppTypography.labelLarge.copyWith(
+                              color: AppColors.success,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: AppSpacing.xs),
+                      Text('Name: ${_selectedStudent!.name}', style: AppTypography.bodyMedium),
+                      Text('Year Level: ${_selectedStudent!.yearLevel}', style: AppTypography.bodyMedium),
+                      Text('Section: ${_selectedStudent!.section}', style: AppTypography.bodyMedium),
+                      Text('Active Borrows: ${_activeBorrows.length}', 
+                        style: AppTypography.bodyMedium.copyWith(
+                          color: AppColors.accent,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActiveBorrowsSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.inventory_2, color: AppColors.accent, size: 24),
+            const SizedBox(width: AppSpacing.sm),
+            Text('Borrowed Items', style: AppTypography.h6),
+            const Spacer(),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
+              decoration: BoxDecoration(
+                color: AppColors.accent.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
+                border: Border.all(color: AppColors.accent.withValues(alpha: 0.3)),
+              ),
+              child: Text(
+                '${_activeBorrows.fold(0, (sum, record) => sum + record.items.fold(0, (itemSum, item) => itemSum + item.quantity))} units total',
+                style: AppTypography.labelMedium.copyWith(
+                  color: AppColors.accent,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.md),
+        ..._activeBorrows.map((record) => Container(
+          margin: const EdgeInsets.only(bottom: AppSpacing.md),
+          child: AppCard(
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpacing.lg),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
+                        border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
+                      ),
+                      child: Text(
+                        'ID: ${record.borrowId}',
+                        style: AppTypography.labelMedium.copyWith(
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      'Borrowed: ${record.borrowedAt.toLocal().toString().split(' ')[0]}',
+                      style: AppTypography.bodySmall.copyWith(
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.md),
+                ...record.items.map((item) => FutureBuilder<String>(
+                  future: _getItemName(item.itemId),
+                  builder: (context, snapshot) {
+                    final itemName = snapshot.data ?? 'Loading...';
+                    final quantityConditions = _quantityConditions[item.id] ?? [];
+                    
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: AppSpacing.md),
+                      padding: const EdgeInsets.all(AppSpacing.md),
+                      decoration: BoxDecoration(
+                        color: AppColors.surface,
+                        borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                        border: Border.all(color: AppColors.outline.withValues(alpha: 0.3)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      itemName,
+                                      style: AppTypography.bodyLarge.copyWith(
+                                        fontWeight: FontWeight.w600,
+                                        color: AppColors.textPrimary,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                      maxLines: 2,
+                                    ),
+                                    const SizedBox(height: AppSpacing.xs),
+                                    Text(
+                                      'Total Quantity: ${item.quantity}',
+                                      style: AppTypography.bodySmall.copyWith(
+                                        color: AppColors.textSecondary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: AppSpacing.md),
+                          Text(
+                            'Return Condition per Unit:',
+                            style: AppTypography.labelLarge.copyWith(
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                          const SizedBox(height: AppSpacing.sm),
+                          Wrap(
+                            spacing: AppSpacing.sm,
+                            runSpacing: AppSpacing.sm,
+                            children: List.generate(item.quantity, (index) {
+                              return Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: AppSpacing.sm,
+                                  vertical: AppSpacing.xs,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppColors.background,
+                                  borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
+                                  border: Border.all(color: AppColors.outline.withValues(alpha: 0.3)),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      'Unit ${index + 1}:',
+                                      style: AppTypography.labelMedium.copyWith(
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    const SizedBox(width: AppSpacing.sm),
+                                    DropdownButton<models.ItemCondition>(
+                                      value: quantityConditions.length > index 
+                                          ? quantityConditions[index] 
+                                          : models.ItemCondition.good,
+                                      isDense: true,
+                                      underline: const SizedBox.shrink(),
+                                      items: models.ItemCondition.values.map((condition) {
+                                        Color conditionColor;
+                                        switch (condition) {
+                                          case models.ItemCondition.good:
+                                            conditionColor = AppColors.success;
+                                            break;
+                                          case models.ItemCondition.damaged:
+                                            conditionColor = AppColors.warning;
+                                            break;
+                                          case models.ItemCondition.lost:
+                                            conditionColor = AppColors.error;
+                                            break;
+                                        }
+                                        
+                                        return DropdownMenuItem(
+                                          value: condition,
+                                          child: Text(
+                                            condition.name.toUpperCase(),
+                                            style: AppTypography.labelSmall.copyWith(
+                                              color: conditionColor,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        );
+                                      }).toList(),
+                                      onChanged: (newCondition) {
+                                        if (newCondition != null) {
+                                          setState(() {
+                                            final conditions = List<models.ItemCondition>.from(_quantityConditions[item.id] ?? []);
+                                            
+                                            while (conditions.length <= index) {
+                                              conditions.add(models.ItemCondition.good);
+                                            }
+                                            
+                                            conditions[index] = newCondition;
+                                            _quantityConditions[item.id] = conditions;
+                                          });
+                                        }
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                )).toList(),
+              ],
+            ),
+            ),
+          ),
+        )).toList(),
+        if (_activeBorrows.isEmpty && _selectedStudent != null)
+          Center(
+            child: Container(
+              padding: const EdgeInsets.all(AppSpacing.lg),
+              child: Column(
+                children: [
+                  Icon(
+                    Icons.inbox_outlined,
+                    size: 48,
+                    color: AppColors.textTertiary,
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  Text(
+                    'No Active Borrows',
+                    style: AppTypography.h6.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
+                  Text(
+                    'This student has no items to return.',
+                    style: AppTypography.bodyMedium.copyWith(
+                      color: AppColors.textTertiary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+      ],
     );
   }
 }

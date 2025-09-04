@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/database_provider.dart';
 import '../providers/borrow_record_provider.dart';
+import '../providers/item_provider.dart';
 import '../models/student.dart' as models;
 import '../models/item.dart' as models;
 import '../models/borrow_record.dart' as models;
@@ -26,6 +27,8 @@ class _ManageRecordsScreenState extends ConsumerState<ManageRecordsScreen>
   List<models.BorrowRecord> _archivedRecords = [];
   List<models.QuantityCondition> _damagedItems = [];
   List<models.QuantityCondition> _lostItems = [];
+  Set<int> _selectedDamagedItems = {};
+  Set<int> _selectedLostItems = {};
   
   List<models.Student> _students = [];
   List<models.Item> _items = [];
@@ -78,6 +81,11 @@ class _ManageRecordsScreenState extends ConsumerState<ManageRecordsScreen>
         _activeRecords = _allRecords
             .where((record) => record.status == models.BorrowStatus.active)
             .toList();
+            
+        // Clear selections when refreshing data
+        _selectedRecords.clear();
+        _selectedDamagedItems.clear();
+        _selectedLostItems.clear();
       });
     } catch (e) {
       if (mounted) {
@@ -108,73 +116,6 @@ class _ManageRecordsScreenState extends ConsumerState<ManageRecordsScreen>
     }
   }
 
-  List<Map<String, dynamic>> _groupItemsByBorrower(List<models.QuantityCondition> conditions) {
-    // Group conditions by borrower
-    final Map<int, List<models.QuantityCondition>> borrowerGroups = {};
-    
-    for (final condition in conditions) {
-      // Find the borrow item for this condition to get item details
-      final borrowItem = _getBorrowItemFromCondition(condition);
-      if (borrowItem != null) {
-        // Find the borrow record to get student ID
-        final borrowRecord = _getBorrowRecordFromBorrowItem(borrowItem);
-        if (borrowRecord != null) {
-          if (!borrowerGroups.containsKey(borrowRecord.studentId)) {
-            borrowerGroups[borrowRecord.studentId] = [];
-          }
-          borrowerGroups[borrowRecord.studentId]!.add(condition);
-        }
-      }
-    }
-
-    // Transform grouped data into display format
-    final List<Map<String, dynamic>> result = [];
-    
-    for (final entry in borrowerGroups.entries) {
-      final studentId = entry.key;
-      final studentConditions = entry.value;
-      
-      // Group by item within this borrower's conditions
-      final Map<int, List<models.QuantityCondition>> itemGroups = {};
-      
-      for (final condition in studentConditions) {
-        final borrowItem = _getBorrowItemFromCondition(condition);
-        if (borrowItem != null) {
-          if (!itemGroups.containsKey(borrowItem.itemId)) {
-            itemGroups[borrowItem.itemId] = [];
-          }
-          itemGroups[borrowItem.itemId]!.add(condition);
-        }
-      }
-      
-      // Create item group display data
-      final List<Map<String, dynamic>> itemGroupsDisplay = [];
-      int totalQuantity = 0;
-      
-      for (final itemEntry in itemGroups.entries) {
-        final itemId = itemEntry.key;
-        final itemConditions = itemEntry.value;
-        final quantity = itemConditions.length;
-        totalQuantity += quantity;
-        
-        itemGroupsDisplay.add({
-          'itemName': _getItemName(itemId),
-          'quantity': quantity,
-        });
-      }
-      
-      result.add({
-        'borrowerName': _getStudentName(studentId),
-        'totalQuantity': totalQuantity,
-        'itemGroups': itemGroupsDisplay,
-      });
-    }
-    
-    // Sort by borrower name
-    result.sort((a, b) => (a['borrowerName'] as String).compareTo(b['borrowerName'] as String));
-    
-    return result;
-  }
 
   models.BorrowItem? _getBorrowItemFromCondition(models.QuantityCondition condition) {
     // Search through all records to find the borrow item
@@ -677,63 +618,66 @@ class _ManageRecordsScreenState extends ConsumerState<ManageRecordsScreen>
       );
     }
 
-    // Group damaged items by borrower
-    final groupedDamagedItems = _groupItemsByBorrower(_damagedItems);
-
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: groupedDamagedItems.length,
-      itemBuilder: (context, index) {
-        final borrowerGroup = groupedDamagedItems[index];
-        return Container(
-          margin: const EdgeInsets.only(bottom: 16),
-          child: AppCard(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(Icons.person, color: AppColors.primary),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          borrowerGroup['borrowerName'] as String,
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: AppColors.warning.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          '${borrowerGroup['totalQuantity']} Damaged',
-                          style: TextStyle(
-                            color: AppColors.warning,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ),
-                    ],
+    return Column(
+      children: [
+        if (_selectedDamagedItems.isNotEmpty)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            color: AppColors.warning.withValues(alpha: 0.1),
+            child: Row(
+              children: [
+                Text(
+                  '${_selectedDamagedItems.length} damaged items selected',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                const Spacer(),
+                ElevatedButton.icon(
+                  onPressed: _repairSelectedDamagedItems,
+                  icon: const Icon(Icons.build),
+                  label: const Text('Mark as Repaired'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.success,
+                    foregroundColor: Colors.white,
                   ),
-                  const SizedBox(height: 12),
-                  ...(borrowerGroup['itemGroups'] as List<Map<String, dynamic>>).map(
-                    (itemGroup) => Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: AppColors.surface,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
+                ),
+                const SizedBox(width: 8),
+                TextButton(
+                  onPressed: () => setState(() => _selectedDamagedItems.clear()),
+                  child: const Text('Clear'),
+                ),
+              ],
+            ),
+          ),
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: _damagedItems.length,
+            itemBuilder: (context, index) {
+              final damagedItem = _damagedItems[index];
+              final isSelected = _selectedDamagedItems.contains(damagedItem.id);
+              final borrowItem = _getBorrowItemFromCondition(damagedItem);
+              final borrowRecord = borrowItem != null ? _getBorrowRecordFromBorrowItem(borrowItem) : null;
+              
+              return Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                child: AppCard(
+                  child: InkWell(
+                    onTap: () => _toggleDamagedItemSelection(damagedItem.id),
+                    borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        border: isSelected ? Border.all(color: AppColors.warning, width: 2) : null,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
                         child: Row(
                           children: [
+                            if (isSelected)
+                              Container(
+                                margin: const EdgeInsets.only(right: 12),
+                                child: Icon(Icons.check_circle, color: AppColors.warning),
+                              ),
                             Icon(Icons.warning, color: AppColors.warning, size: 20),
                             const SizedBox(width: 12),
                             Expanded(
@@ -741,14 +685,20 @@ class _ManageRecordsScreenState extends ConsumerState<ManageRecordsScreen>
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    itemGroup['itemName'] as String,
+                                    borrowItem != null ? _getItemName(borrowItem.itemId) : 'Unknown Item',
                                     style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                                       fontWeight: FontWeight.w600,
                                     ),
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
-                                    'Quantity: ${itemGroup['quantity']} damaged',
+                                    'Borrower: ${borrowRecord != null ? _getStudentName(borrowRecord.studentId) : 'Unknown'}',
+                                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  ),
+                                  Text(
+                                    'Unit ${damagedItem.quantityUnit} - Damaged',
                                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                       color: AppColors.textSecondary,
                                     ),
@@ -756,17 +706,32 @@ class _ManageRecordsScreenState extends ConsumerState<ManageRecordsScreen>
                                 ],
                               ),
                             ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: AppColors.warning.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                'Damaged',
+                                style: TextStyle(
+                                  color: AppColors.warning,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
                           ],
                         ),
                       ),
                     ),
                   ),
-                ],
-              ),
-            ),
+                ),
+              );
+            },
           ),
-        );
-      },
+        ),
+      ],
     );
   }
 
@@ -784,63 +749,66 @@ class _ManageRecordsScreenState extends ConsumerState<ManageRecordsScreen>
       );
     }
 
-    // Group lost items by borrower
-    final groupedLostItems = _groupItemsByBorrower(_lostItems);
-
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: groupedLostItems.length,
-      itemBuilder: (context, index) {
-        final borrowerGroup = groupedLostItems[index];
-        return Container(
-          margin: const EdgeInsets.only(bottom: 16),
-          child: AppCard(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(Icons.person, color: AppColors.primary),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          borrowerGroup['borrowerName'] as String,
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: AppColors.error.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          '${borrowerGroup['totalQuantity']} Lost',
-                          style: TextStyle(
-                            color: AppColors.error,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ),
-                    ],
+    return Column(
+      children: [
+        if (_selectedLostItems.isNotEmpty)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            color: AppColors.error.withValues(alpha: 0.1),
+            child: Row(
+              children: [
+                Text(
+                  '${_selectedLostItems.length} lost items selected',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                const Spacer(),
+                ElevatedButton.icon(
+                  onPressed: _replaceSelectedLostItems,
+                  icon: const Icon(Icons.add_shopping_cart),
+                  label: const Text('Mark as Replaced'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.success,
+                    foregroundColor: Colors.white,
                   ),
-                  const SizedBox(height: 12),
-                  ...(borrowerGroup['itemGroups'] as List<Map<String, dynamic>>).map(
-                    (itemGroup) => Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: AppColors.surface,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
+                ),
+                const SizedBox(width: 8),
+                TextButton(
+                  onPressed: () => setState(() => _selectedLostItems.clear()),
+                  child: const Text('Clear'),
+                ),
+              ],
+            ),
+          ),
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: _lostItems.length,
+            itemBuilder: (context, index) {
+              final lostItem = _lostItems[index];
+              final isSelected = _selectedLostItems.contains(lostItem.id);
+              final borrowItem = _getBorrowItemFromCondition(lostItem);
+              final borrowRecord = borrowItem != null ? _getBorrowRecordFromBorrowItem(borrowItem) : null;
+              
+              return Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                child: AppCard(
+                  child: InkWell(
+                    onTap: () => _toggleLostItemSelection(lostItem.id),
+                    borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        border: isSelected ? Border.all(color: AppColors.error, width: 2) : null,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
                         child: Row(
                           children: [
+                            if (isSelected)
+                              Container(
+                                margin: const EdgeInsets.only(right: 12),
+                                child: Icon(Icons.check_circle, color: AppColors.error),
+                              ),
                             Icon(Icons.error, color: AppColors.error, size: 20),
                             const SizedBox(width: 12),
                             Expanded(
@@ -848,14 +816,20 @@ class _ManageRecordsScreenState extends ConsumerState<ManageRecordsScreen>
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    itemGroup['itemName'] as String,
+                                    borrowItem != null ? _getItemName(borrowItem.itemId) : 'Unknown Item',
                                     style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                                       fontWeight: FontWeight.w600,
                                     ),
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
-                                    'Quantity: ${itemGroup['quantity']} lost',
+                                    'Borrower: ${borrowRecord != null ? _getStudentName(borrowRecord.studentId) : 'Unknown'}',
+                                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  ),
+                                  Text(
+                                    'Unit ${lostItem.quantityUnit} - Lost',
                                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                       color: AppColors.textSecondary,
                                     ),
@@ -863,17 +837,32 @@ class _ManageRecordsScreenState extends ConsumerState<ManageRecordsScreen>
                                 ],
                               ),
                             ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: AppColors.error.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                'Lost',
+                                style: TextStyle(
+                                  color: AppColors.error,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
                           ],
                         ),
                       ),
                     ),
                   ),
-                ],
-              ),
-            ),
+                ),
+              );
+            },
           ),
-        );
-      },
+        ),
+      ],
     );
   }
 
@@ -885,6 +874,108 @@ class _ManageRecordsScreenState extends ConsumerState<ManageRecordsScreen>
         _selectedRecords.add(recordId);
       }
     });
+  }
+
+  void _toggleDamagedItemSelection(int conditionId) {
+    setState(() {
+      if (_selectedDamagedItems.contains(conditionId)) {
+        _selectedDamagedItems.remove(conditionId);
+      } else {
+        _selectedDamagedItems.add(conditionId);
+      }
+    });
+  }
+
+  void _toggleLostItemSelection(int conditionId) {
+    setState(() {
+      if (_selectedLostItems.contains(conditionId)) {
+        _selectedLostItems.remove(conditionId);
+      } else {
+        _selectedLostItems.add(conditionId);
+      }
+    });
+  }
+
+  Future<void> _repairSelectedDamagedItems() async {
+    if (_selectedDamagedItems.isEmpty) return;
+
+    final confirmed = await _showConfirmDialog(
+      'Repair Items',
+      'Mark ${_selectedDamagedItems.length} damaged item(s) as repaired and restore to stock?',
+      'Mark as Repaired',
+      AppColors.success,
+    );
+
+    if (!confirmed) return;
+
+    try {
+      setState(() => _isLoading = true);
+      
+      final databaseService = ref.read(databaseServiceProvider);
+      await databaseService.restoreDamagedItemsToStock(_selectedDamagedItems.toList());
+      
+      await _loadAllData();
+      setState(() => _selectedDamagedItems.clear());
+      
+      // Invalidate item provider to update dashboard in real-time
+      ref.invalidate(itemNotifierProvider);
+      ref.invalidate(allItemsProvider);
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Damaged items marked as repaired and restored to stock')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error repairing items: $e')),
+        );
+      }
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _replaceSelectedLostItems() async {
+    if (_selectedLostItems.isEmpty) return;
+
+    final confirmed = await _showConfirmDialog(
+      'Replace Items',
+      'Mark ${_selectedLostItems.length} lost item(s) as replaced and restore to stock?',
+      'Mark as Replaced',
+      AppColors.success,
+    );
+
+    if (!confirmed) return;
+
+    try {
+      setState(() => _isLoading = true);
+      
+      final databaseService = ref.read(databaseServiceProvider);
+      await databaseService.restoreLostItemsToStock(_selectedLostItems.toList());
+      
+      await _loadAllData();
+      setState(() => _selectedLostItems.clear());
+      
+      // Invalidate item provider to update dashboard in real-time
+      ref.invalidate(itemNotifierProvider);
+      ref.invalidate(allItemsProvider);
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Lost items marked as replaced and restored to stock')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error replacing items: $e')),
+        );
+      }
+    } finally {
+      setState(() => _isLoading = false);
+    }
   }
 
   void _showRecordDetails(models.BorrowRecord record) {

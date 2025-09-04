@@ -6,6 +6,9 @@ import '../providers/borrow_record_provider.dart';
 import '../models/student.dart' as models;
 import '../models/storage.dart' as models;
 import '../models/item.dart' as models;
+import '../core/design_system.dart';
+import '../shared/widgets/app_scaffold.dart';
+import '../shared/widgets/app_card.dart';
 
 class BorrowScreen extends ConsumerStatefulWidget {
   const BorrowScreen({super.key});
@@ -150,218 +153,524 @@ class _BorrowScreenState extends ConsumerState<BorrowScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Borrow Items'),
-        backgroundColor: Colors.blue,
-        foregroundColor: Colors.white,
+    final totalSelectedItems = _selectedItems.values.fold(0, (sum, qty) => sum + qty);
+    
+    return AppScaffold(
+      title: 'Borrow Items',
+      body: Column(
+        children: [
+          // Progress indicator
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(AppSpacing.md),
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              border: Border(bottom: BorderSide(color: AppColors.outline.withValues(alpha: 0.2))),
+            ),
+            child: Row(
+              children: [
+                _buildStepIndicator(1, 'Student', _selectedStudent != null),
+                _buildStepDivider(_selectedStudent != null),
+                _buildStepIndicator(2, 'Items', _selectedStorages.isNotEmpty),
+                _buildStepDivider(totalSelectedItems > 0),
+                _buildStepIndicator(3, 'Review', totalSelectedItems > 0),
+              ],
+            ),
+          ),
+          
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(AppSpacing.screenPadding),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Step 1: Student Search Section
+                  _buildStudentSearchSection(),
+                  
+                  const SizedBox(height: AppSpacing.lg),
+                  
+                  // Step 2: Storage Selection
+                  if (_selectedStudent != null) ...[
+                    _buildStorageSelectionSection(),
+                    const SizedBox(height: AppSpacing.lg),
+                  ],
+                  
+                  // Step 3: Items List
+                  if (_selectedStorages.isNotEmpty) ...[
+                    _buildItemsSelectionSection(),
+                  ],
+                  
+                  // Bottom padding for floating action button
+                  const SizedBox(height: 100),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
-      resizeToAvoidBottomInset: true,
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Student Search Section
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Form(
-                  key: _formKey,
+      floatingActionButton: totalSelectedItems > 0 
+        ? FloatingActionButton.extended(
+            onPressed: _createBorrowRecord,
+            backgroundColor: AppColors.primary,
+            foregroundColor: AppColors.onPrimary,
+            icon: const Icon(Icons.shopping_cart_checkout),
+            label: Text('Borrow $totalSelectedItems ${totalSelectedItems == 1 ? 'Item' : 'Items'}'),
+          )
+        : null,
+    );
+  }
+
+  Widget _buildStepIndicator(int step, String label, bool isActive) {
+    return Column(
+      children: [
+        Container(
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: isActive ? AppColors.primary : AppColors.outline,
+          ),
+          child: Center(
+            child: Text(
+              step.toString(),
+              style: AppTypography.labelMedium.copyWith(
+                color: isActive ? AppColors.onPrimary : AppColors.onSurface,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          style: AppTypography.labelSmall.copyWith(
+            color: isActive ? AppColors.primary : AppColors.textSecondary,
+            fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStepDivider(bool isActive) {
+    return Expanded(
+      child: Container(
+        height: 2,
+        margin: const EdgeInsets.only(bottom: 20),
+        color: isActive ? AppColors.primary : AppColors.outline,
+      ),
+    );
+  }
+
+  Widget _buildStudentSearchSection() {
+    return AppCard(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.person_search, color: AppColors.primary, size: 24),
+                  const SizedBox(width: AppSpacing.sm),
+                  Text('Find Student', style: AppTypography.h6),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.md),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: _studentIdController,
+                      decoration: InputDecoration(
+                        labelText: 'Student ID',
+                        border: const OutlineInputBorder(),
+                        hintText: 'Enter student ID',
+                        prefixIcon: const Icon(Icons.badge),
+                        filled: true,
+                        fillColor: AppColors.surface,
+                      ),
+                      validator: (value) {
+                        if (value == null || value.trim().isEmpty) {
+                          return 'Please enter student ID';
+                        }
+                        return null;
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.md),
+                  ElevatedButton.icon(
+                    onPressed: _searchStudent,
+                    icon: const Icon(Icons.search),
+                    label: const Text('Search'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: AppColors.onPrimary,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.md,
+                        vertical: AppSpacing.sm + 4,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              if (_selectedStudent != null) ...[
+                const SizedBox(height: AppSpacing.md),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(AppSpacing.md),
+                  decoration: BoxDecoration(
+                    color: AppColors.success.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                    border: Border.all(color: AppColors.success.withValues(alpha: 0.3)),
+                  ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Student Information', 
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 16),
                       Row(
                         children: [
-                          Expanded(
-                            child: TextFormField(
-                              controller: _studentIdController,
-                              decoration: const InputDecoration(
-                                labelText: 'Student ID',
-                                border: OutlineInputBorder(),
-                                hintText: 'Enter student ID',
-                              ),
-                              validator: (value) {
-                                if (value == null || value.trim().isEmpty) {
-                                  return 'Please enter student ID';
-                                }
-                                return null;
-                              },
+                          Icon(Icons.check_circle, color: AppColors.success, size: 20),
+                          const SizedBox(width: AppSpacing.xs),
+                          Text(
+                            'Student Found',
+                            style: AppTypography.labelLarge.copyWith(
+                              color: AppColors.success,
+                              fontWeight: FontWeight.w600,
                             ),
-                          ),
-                          const SizedBox(width: 16),
-                          ElevatedButton(
-                            onPressed: _searchStudent,
-                            child: const Text('Search'),
                           ),
                         ],
                       ),
-                      if (_selectedStudent != null) ...[
-                        const SizedBox(height: 16),
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.green.shade50,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.green.shade200),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('✓ Student Found', 
-                                style: TextStyle(color: Colors.green.shade700, fontWeight: FontWeight.bold)),
-                              Text('Name: ${_selectedStudent!.name}'),
-                              Text('Year Level: ${_selectedStudent!.yearLevel}'),
-                              Text('Section: ${_selectedStudent!.section}'),
-                            ],
-                          ),
-                        ),
-                      ],
+                      const SizedBox(height: AppSpacing.xs),
+                      Text('Name: ${_selectedStudent!.name}', style: AppTypography.bodyMedium),
+                      Text('Year Level: ${_selectedStudent!.yearLevel}', style: AppTypography.bodyMedium),
+                      Text('Section: ${_selectedStudent!.section}', style: AppTypography.bodyMedium),
                     ],
-                  ),
-                ),
-              ),
-            ),
-            
-            const SizedBox(height: 16),
-            
-            // Storage Selection
-            if (_selectedStudent != null) ...[
-              const Text('Select Storages (Multiple Allowed)', 
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              SizedBox(
-                height: 60,
-                child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: _storages.length,
-                  itemBuilder: (context, index) {
-                    final storage = _storages[index];
-                    final isSelected = _selectedStorages.contains(storage.id);
-                    return Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: FilterChip(
-                        label: Text(storage.name),
-                        selected: isSelected,
-                        onSelected: (_) => _toggleStorageSelection(storage),
-                        backgroundColor: Colors.grey.shade200,
-                        selectedColor: Colors.blue.shade100,
-                      ),
-                    );
-                  },
-                ),
-              ),
-              
-              const SizedBox(height: 16),
-              
-              // Items List
-              if (_selectedStorages.isNotEmpty) ...[
-                const Text('Available Items from Selected Storages', 
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 8),
-                SizedBox(
-                  height: 400,
-                  child: ListView.builder(
-                    itemCount: _itemsByStorage.values.fold<int>(0, (sum, items) => sum + items.length),
-                    itemBuilder: (context, index) {
-                      // Flatten all items from selected storages
-                      final allItems = <models.Item>[];
-                      final storageNames = <int, String>{};
-                      
-                      for (final storageId in _selectedStorages) {
-                        final storage = _storages.firstWhere((s) => s.id == storageId);
-                        storageNames[storageId] = storage.name;
-                        allItems.addAll(_itemsByStorage[storageId] ?? []);
-                      }
-                      
-                      final item = allItems[index];
-                      final selectedQuantity = _selectedItems[item.id] ?? 0;
-                      final storageName = storageNames[item.storageId] ?? 'Unknown';
-                      
-                      return Card(
-                        child: ListTile(
-                          title: Text(
-                            item.name,
-                            overflow: TextOverflow.ellipsis,
-                            maxLines: 1,
-                          ),
-                          subtitle: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Storage: $storageName',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w500,
-                                  color: Colors.blue.shade700,
-                                ),
-                              ),
-                              if (item.description?.isNotEmpty == true)
-                                Text(
-                                  item.description!,
-                                  overflow: TextOverflow.ellipsis,
-                                  maxLines: 2,
-                                ),
-                              Text(
-                                'Available: ${item.availableQuantity}/${item.totalQuantity}',
-                                overflow: TextOverflow.ellipsis,
-                                maxLines: 1,
-                              ),
-                            ],
-                          ),
-                          trailing: item.availableQuantity > 0 
-                            ? Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  IconButton(
-                                    onPressed: selectedQuantity > 0 ? () {
-                                      setState(() {
-                                        if (selectedQuantity == 1) {
-                                          _selectedItems.remove(item.id);
-                                        } else {
-                                          _selectedItems[item.id] = selectedQuantity - 1;
-                                        }
-                                      });
-                                    } : null,
-                                    icon: const Icon(Icons.remove),
-                                  ),
-                                  Text(selectedQuantity.toString()),
-                                  IconButton(
-                                    onPressed: selectedQuantity < item.availableQuantity ? () {
-                                      setState(() {
-                                        _selectedItems[item.id] = selectedQuantity + 1;
-                                      });
-                                    } : null,
-                                    icon: const Icon(Icons.add),
-                                  ),
-                                ],
-                              )
-                            : const Text('Out of Stock'),
-                        ),
-                      );
-                    },
                   ),
                 ),
               ],
             ],
-            SizedBox(height: MediaQuery.of(context).viewInsets.bottom),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStorageSelectionSection() {
+    return AppCard(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.inventory_2, color: AppColors.primary, size: 24),
+                const SizedBox(width: AppSpacing.sm),
+                Text('Select Storage Locations', style: AppTypography.h6),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              'Choose one or more storage locations to browse items',
+              style: AppTypography.bodyMedium.copyWith(color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            Wrap(
+              spacing: AppSpacing.sm,
+              runSpacing: AppSpacing.sm,
+              children: _storages.map((storage) {
+                final isSelected = _selectedStorages.contains(storage.id);
+                return FilterChip(
+                  label: Text(storage.name),
+                  selected: isSelected,
+                  onSelected: (_) => _toggleStorageSelection(storage),
+                  backgroundColor: AppColors.surface,
+                  selectedColor: AppColors.primary.withValues(alpha: 0.2),
+                  checkmarkColor: AppColors.primary,
+                  labelStyle: TextStyle(
+                    color: isSelected ? AppColors.primary : AppColors.onSurface,
+                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                  ),
+                );
+              }).toList(),
+            ),
+            if (_selectedStorages.isNotEmpty) ...[
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                '${_selectedStorages.length} ${_selectedStorages.length == 1 ? 'storage' : 'storages'} selected',
+                style: AppTypography.labelMedium.copyWith(color: AppColors.primary),
+              ),
+            ],
           ],
         ),
       ),
-      floatingActionButton: _selectedStudent != null && _selectedItems.isNotEmpty 
-        ? FloatingActionButton.extended(
-            onPressed: _createBorrowRecord,
-            label: Text(
-              'Borrow ${_selectedItems.values.fold(0, (sum, qty) => sum + qty)} Items',
-              overflow: TextOverflow.ellipsis,
-              maxLines: 1,
+    );
+  }
+
+  Widget _buildItemsSelectionSection() {
+    // Flatten all items from selected storages
+    final allItems = <models.Item>[];
+    final storageNames = <int, String>{};
+    
+    for (final storageId in _selectedStorages) {
+      final storage = _storages.firstWhere((s) => s.id == storageId);
+      storageNames[storageId] = storage.name;
+      allItems.addAll(_itemsByStorage[storageId] ?? []);
+    }
+
+    return AppCard(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.shopping_cart, color: AppColors.primary, size: 24),
+                const SizedBox(width: AppSpacing.sm),
+                Text('Select Items', style: AppTypography.h6),
+              ],
             ),
-            icon: const Icon(Icons.check),
-            backgroundColor: Colors.green,
-          )
-        : null,
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              'Available items from selected storage locations',
+              style: AppTypography.bodyMedium.copyWith(color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            
+            if (allItems.isEmpty)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(AppSpacing.xl),
+                child: Column(
+                  children: [
+                    Icon(Icons.inventory_2, size: 48, color: AppColors.textSecondary),
+                    const SizedBox(height: AppSpacing.sm),
+                    Text(
+                      'No items found',
+                      style: AppTypography.bodyLarge.copyWith(color: AppColors.textSecondary),
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    Text(
+                      'Try selecting different storage locations',
+                      style: AppTypography.bodyMedium.copyWith(color: AppColors.textSecondary),
+                    ),
+                  ],
+                ),
+              )
+            else
+              ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: allItems.length,
+                separatorBuilder: (context, index) => const SizedBox(height: AppSpacing.sm),
+                itemBuilder: (context, index) {
+                  final item = allItems[index];
+                  final selectedQuantity = _selectedItems[item.id] ?? 0;
+                  final storageName = storageNames[item.storageId] ?? 'Unknown';
+                  final isOutOfStock = item.availableQuantity <= 0;
+                  
+                  return Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                      border: Border.all(
+                        color: selectedQuantity > 0 
+                          ? AppColors.primary.withValues(alpha: 0.5)
+                          : AppColors.outline.withValues(alpha: 0.3),
+                        width: selectedQuantity > 0 ? 2 : 1,
+                      ),
+                      color: selectedQuantity > 0 
+                        ? AppColors.primary.withValues(alpha: 0.05)
+                        : AppColors.surface,
+                    ),
+                    padding: const EdgeInsets.all(AppSpacing.md),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    item.name,
+                                    style: AppTypography.bodyLarge.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  const SizedBox(height: AppSpacing.xs),
+                                  Row(
+                                    children: [
+                                      Icon(Icons.location_on, size: 16, color: AppColors.primary),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        storageName,
+                                        style: AppTypography.bodySmall.copyWith(
+                                          color: AppColors.primary,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  if (item.description?.isNotEmpty == true) ...[
+                                    const SizedBox(height: AppSpacing.xs),
+                                    Text(
+                                      item.description!,
+                                      style: AppTypography.bodyMedium.copyWith(
+                                        color: AppColors.textSecondary,
+                                      ),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: AppSpacing.md),
+                            Column(
+                              children: [
+                                Text(
+                                  '${item.availableQuantity}/${item.totalQuantity}',
+                                  style: AppTypography.labelLarge.copyWith(
+                                    color: isOutOfStock ? AppColors.error : AppColors.success,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                Text(
+                                  'Available',
+                                  style: AppTypography.labelSmall.copyWith(
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: AppSpacing.md),
+                        
+                        if (isOutOfStock)
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(
+                              vertical: AppSpacing.sm,
+                              horizontal: AppSpacing.md,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.error.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
+                              border: Border.all(color: AppColors.error.withValues(alpha: 0.3)),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.block, color: AppColors.error, size: 16),
+                                const SizedBox(width: AppSpacing.xs),
+                                Text(
+                                  'Out of Stock',
+                                  style: AppTypography.labelMedium.copyWith(
+                                    color: AppColors.error,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        else
+                          Row(
+                            children: [
+                              Expanded(
+                                child: selectedQuantity > 0
+                                  ? Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: AppSpacing.xs,
+                                        horizontal: AppSpacing.sm,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.primary.withValues(alpha: 0.1),
+                                        borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
+                                        border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+                                      ),
+                                      child: Row(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          Icon(Icons.check_circle, color: AppColors.primary, size: 16),
+                                          const SizedBox(width: AppSpacing.xs),
+                                          Text(
+                                            '$selectedQuantity ${selectedQuantity == 1 ? 'item' : 'items'} selected',
+                                            style: AppTypography.labelMedium.copyWith(
+                                              color: AppColors.primary,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    )
+                                  : Text(
+                                      'Tap + to add items',
+                                      style: AppTypography.bodyMedium.copyWith(
+                                        color: AppColors.textSecondary,
+                                      ),
+                                    ),
+                              ),
+                              const SizedBox(width: AppSpacing.md),
+                              Container(
+                                decoration: BoxDecoration(
+                                  border: Border.all(color: AppColors.outline.withValues(alpha: 0.3)),
+                                  borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      onPressed: selectedQuantity > 0 ? () {
+                                        setState(() {
+                                          if (selectedQuantity == 1) {
+                                            _selectedItems.remove(item.id);
+                                          } else {
+                                            _selectedItems[item.id] = selectedQuantity - 1;
+                                          }
+                                        });
+                                      } : null,
+                                      icon: const Icon(Icons.remove),
+                                      iconSize: 20,
+                                      constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+                                    ),
+                                    Container(
+                                      constraints: const BoxConstraints(minWidth: 40),
+                                      child: Text(
+                                        selectedQuantity.toString(),
+                                        textAlign: TextAlign.center,
+                                        style: AppTypography.bodyLarge.copyWith(
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                    IconButton(
+                                      onPressed: selectedQuantity < item.availableQuantity ? () {
+                                        setState(() {
+                                          _selectedItems[item.id] = selectedQuantity + 1;
+                                        });
+                                      } : null,
+                                      icon: const Icon(Icons.add),
+                                      iconSize: 20,
+                                      constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+          ],
+        ),
+      ),
     );
   }
 }
