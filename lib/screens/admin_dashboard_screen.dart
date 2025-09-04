@@ -12,6 +12,7 @@ import 'manage_students_screen.dart';
 import 'manage_records_screen.dart';
 import 'reports_screen.dart';
 import 'settings_screen.dart';
+import 'admin_user_manual_screen.dart';
 
 class AdminDashboardScreen extends ConsumerWidget {
   const AdminDashboardScreen({super.key});
@@ -39,6 +40,12 @@ class AdminDashboardScreen extends ConsumerWidget {
           onPressed: () => _showLogoutDialog(context),
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.help_outline),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (context) => const AdminUserManualScreen()),
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.settings_outlined),
             onPressed: () => Navigator.of(context).push(

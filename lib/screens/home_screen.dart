@@ -7,6 +7,7 @@ import '../shared/widgets/app_scaffold.dart';
 import '../shared/widgets/action_card.dart';
 import '../shared/widgets/app_card.dart';
 import '../providers/settings_provider.dart';
+import 'student_user_manual_screen.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -160,7 +161,48 @@ class HomeScreen extends ConsumerWidget {
               ),
             ),
             const SizedBox(height: AppSpacing.lg),
+            _buildUserManualButton(context),
+            const SizedBox(height: AppSpacing.md),
             _buildRecentActivityCard(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildUserManualButton(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      height: 56,
+      child: ElevatedButton(
+        onPressed: () => Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => const StudentUserManualScreen(),
+          ),
+        ),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppColors.info.withValues(alpha: 0.1),
+          foregroundColor: AppColors.info,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
+            side: BorderSide(
+              color: AppColors.info.withValues(alpha: 0.3),
+              width: 1,
+            ),
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.help_outline_rounded, size: 20),
+            const SizedBox(width: AppSpacing.sm),
+            Text(
+              'User Manual',
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ],
         ),
       ),
