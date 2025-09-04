@@ -39,7 +39,7 @@ ToolEase is a comprehensive inventory management system designed specifically fo
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/your-org/toolease.git
+   git clone https://github.com/xoftwer/toolease.git
    cd toolease
    ```
 
